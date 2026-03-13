@@ -1,26 +1,148 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap');
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --background: #0d0d0d;
+  --foreground: #f0ece4;
+  --surface-white: rgba(255, 255, 255, 0.02);
+  --border-white: rgba(255, 255, 255, 0.05);
+  --border-white-hover: rgba(255, 255, 255, 0.18);
+  --border-white-active: rgba(255, 255, 255, 0.25);
+  --border-top: rgba(255, 255, 255, 0.12);
+  --border-subtle: rgba(255, 255, 255, 0.04);
+  --border-chip: rgba(255, 255, 255, 0.08);
+  --text-muted: rgba(240, 236, 228, 0.5);
+  --text-chip: rgba(240, 236, 228, 0.45);
+  --text-chip-hover: rgba(240, 236, 228, 0.7);
+  --wealth-emerald: #144634;
+  --accent-emerald: #1a4d38;
 }
 
 body {
-  background: var(--background);
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Inter', sans-serif;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: 'Cormorant Garamond', serif;
+}
+
+/* Grain overlay */
+.grain-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0.04;
+  background-image: url(https://lh3.googleusercontent.com/aida-public/AB6AXuBIYCHSnSYNINd8FWzgsczCaCLr6v3L_Rg18EBWpne8Fet8ubDSa8Ek0L3zU14jd92mHEcsIGJgIi3blejGsvpo-Y295mpYeccpuAPH9PMAkfG27JbSzqLehxQ0LpNXA1UpDMF2czLBXJE7W9_n49Wzn3wgVkk4ym6RVWzsMVGlOlN-QBPR7us3YL9Dm8J8P6xpVfwAYymxDV6GNwxOXudPQKjyZpX1za0OffJnLgNN-vH6knEUvoHGkIWMCH0pX9srTB1y3jgW1nfV);
+}
+
+/* Radial gradient behind heading */
+.radial-glow {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  z-index: -1;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  height: 60vh;
+  background: radial-gradient(circle at top, #161614 0%, #0d0d0d 70%);
+}
+
+/* Category label - small-caps, uppercase, muted */
+.category-label {
+  font-size: 11px;
+  font-weight: 300;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  opacity: 0.5;
+}
+
+/* Action card - quiet luxury borders */
+.action-card {
+  background-color: var(--surface-white);
+  border-top: 1px solid var(--border-top);
+  border-right: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  border-left: 1px solid var(--border-subtle);
+  transition: border-color 0.4s ease, transform 0.4s ease, background-color 0.4s ease;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.action-card:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+  border-top-color: var(--border-white-active);
+}
+
+/* Ghost prompt chips */
+.prompt-chip {
+  padding: 6px 16px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-chip);
+  color: var(--text-chip);
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-style: italic;
+  font-weight: 300;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.prompt-chip:hover {
+  border-color: var(--border-white-hover);
+  color: var(--text-chip-hover);
+}
+
+/* Input focus glow */
+.pill-input-container {
+  transition: box-shadow 0.5s ease;
+}
+
+.pill-input-container:focus-within {
+  box-shadow: 0 0 25px rgba(26, 77, 56, 0.15);
+}
+
+/* Fade transition for placeholder text */
+.placeholder-fade {
+  transition: opacity 0.8s ease;
+}
+
+/* Custom scrollbar for chat */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Hide scrollbar completely while keeping scroll functionality */
+.hide-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
 }
