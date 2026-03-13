@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { ToastProvider } from "./providers";
 
 export const metadata: Metadata = {
   title: "Wealthmind | Private Wealth Management",
@@ -21,6 +22,7 @@ export default function RootLayout({
       <body className="h-screen flex flex-col overflow-hidden">
         <div className="grain-overlay"></div>
         <div className="radial-glow"></div>
+        <ToastProvider />
         {children}
       </body>
     </html>

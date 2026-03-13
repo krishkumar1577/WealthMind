@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
+import { saveToLocalStorage, getFromLocalStorage } from "@/lib/utils";
 
 const PLACEHOLDERS = [
   "What's my tax exposure if I exit TSLA this quarter?",
@@ -44,11 +46,17 @@ export default function Home() {
   const [fadeOut, setFadeOut] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
   useEffect(() => {
     setMounted(true);
+    // Load any saved search history or preferences
+    const savedInput = getFromLocalStorage('wealthmind_last_search', '');
+    if (savedInput) {
+      setInputValue(savedInput);
+    }
   }, []);
 
   useEffect(() => {
@@ -65,11 +73,61 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [mounted]);
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     const prompt = inputValue.trim();
-    if (prompt) {
-      router.push(`/chat?prompt=${encodeURIComponent(prompt)}`);
+    
+    if (!prompt) {
+      toast.error("Please enter a prompt");
+      inputRef.current?.focus();
+      return;
     }
+
+    if (prompt.length < 5) {
+      toast.error("Prompt must be at least 5 characters");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Save search to localStorage for history
+      saveToLocalStorage('wealthmind_last_search', prompt);
+      
+      // Simulate processing
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      router.push(`/chat?prompt=${encodeURIComponent(prompt)}`);
+    } catch (error) {
+      toast.error("Failed to navigate to chat");
+      setIsLoading(false);
+    }
+  };
+
+  const handleCardClick = (cardTitle: string) => {
+    let prompt = "";
+    switch (cardTitle) {
+      case "Tax Liability":
+        prompt = "What is my current tax liability estimate for this year?";
+        break;
+      case "Transactions":
+        prompt = "Show me recent transactions across all my accounts";
+        break;
+      case "Upload Files":
+        router.push("/upload");
+        return;
+      case "Generate P&L":
+        prompt = "Generate a P&L statement for my investments";
+        break;
+    }
+
+    if (prompt) {
+      setInputValue(prompt);
+      setTimeout(() => handleSendMessage(), 100);
+    }
+  };
+
+  const handlePromptChipClick = (chip: string) => {
+    setInputValue(chip);
+    setTimeout(() => handleSendMessage(), 100);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -113,9 +171,11 @@ export default function Home() {
       {/* BEGIN: Middle Zone (Action Cards) */}
       <main className="w-full max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-6 mb-24">
         {FEATURE_CARDS.map((card, idx) => (
-          <div
+          <button
             key={idx}
-            className="action-card bg-white/[0.02] p-8 h-56 flex flex-col justify-between"
+            onClick={() => handleCardClick(card.title)}
+            disabled={isLoading}
+            className="action-card bg-white/[0.02] p-8 h-56 flex flex-col justify-between hover:bg-white/[0.04] transition-colors disabled:opacity-50 cursor-pointer text-left"
           >
             <div>
               <span className="category-label">{card.category}</span>
@@ -124,14 +184,19 @@ export default function Home() {
             <p className="text-sm opacity-60 leading-relaxed font-light">
               {card.description}
             </p>
-          </div>
+          </button>
         ))}
       </main>
 
       {/* Prompt Chips */}
       <div className="flex justify-center gap-4 mb-12 flex-wrap">
         {PROMPT_CHIPS.map((chip, idx) => (
-          <button key={idx} className="prompt-chip">
+          <button 
+            key={idx} 
+            onClick={() => handlePromptChipClick(chip)}
+            disabled={isLoading}
+            className="prompt-chip disabled:opacity-50"
+          >
             {chip}
           </button>
         ))}
@@ -172,28 +237,53 @@ export default function Home() {
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="bg-transparent border-none focus:ring-0 w-full text-lg font-light placeholder:opacity-30 outline-none"
+            className="bg-transparent border-none focus:ring-0 w-full text-lg font-light placeholder:opacity-30 outline-none disabled:opacity-50"
             placeholder="Inquire about your holdings..."
             type="text"
+            disabled={isLoading}
           />
           <button
             onClick={handleSendMessage}
-            className="ml-4 w-10 h-10 rounded-full flex items-center justify-center hover:opacity-80 transition-opacity"
+            disabled={isLoading}
+            className="ml-4 w-10 h-10 rounded-full flex items-center justify-center hover:opacity-80 transition-opacity disabled:opacity-50"
             style={{ backgroundColor: "#1a4d38" }}
           >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="#f0ece4"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M5 10l7-7m0 0l7 7m-7-7v18"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-              />
-            </svg>
+            {isLoading ? (
+              <svg
+                className="w-5 h-5 animate-spin"
+                fill="none"
+                stroke="#f0ece4"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                />
+              </svg>
+            ) : (
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="#f0ece4"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  d="M5 10l7-7m0 0l7 7m-7-7v18"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                />
+              </svg>
+            )}
           </button>
         </div>
 

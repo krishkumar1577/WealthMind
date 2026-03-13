@@ -170,9 +170,9 @@ function ChatContent() {
             )}
           </div>
         </div>
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-wealth-black via-wealth-black to-transparent pt-12 pb-8">
 
         {/* BEGIN: Input Area */}
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-wealth-black via-wealth-black to-transparent pt-12 pb-8">
           <div className="max-w-2xl mx-auto px-6">
             {/* Suggestion Chips */}
             <div className="flex gap-3 mb-4 justify-center flex-wrap">
@@ -192,7 +192,11 @@ function ChatContent() {
 
             {/* Input Bar */}
             <div className="relative flex items-center mb-3">
-              <div className="absolute left-4 opacity-40 hover:opacity-100 cursor-pointer transition-opacity">
+              <button 
+                onClick={() => router.push("/upload")}
+                className="absolute left-4 opacity-40 hover:opacity-100 cursor-pointer transition-opacity"
+                title="Upload documents"
+              >
                 <svg
                   className="w-5 h-5"
                   fill="none"
@@ -206,7 +210,7 @@ function ChatContent() {
                     strokeWidth="1.5"
                   ></path>
                 </svg>
-              </div>
+              </button>
               <input
                 ref={inputRef}
                 value={inputValue}
