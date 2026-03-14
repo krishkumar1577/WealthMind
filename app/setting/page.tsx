@@ -23,6 +23,13 @@ export default function SettingsPage() {
     sessionTimeout: '1 hour',
   });
 
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [requestFormData, setRequestFormData] = useState({
+    integrationName: '',
+    useCase: '',
+    email: '',
+  });
+
   useEffect(() => {
     const savedProfile = getFromLocalStorage('wealthmind_profile', profileData);
     const savedSecurity = getFromLocalStorage('wealthmind_security', securityData);
@@ -88,6 +95,39 @@ export default function SettingsPage() {
         toast.success('Account deleted successfully');
         router.push('/');
       }, 1500);
+    }
+  };
+
+  const handleRequestIntegration = async () => {
+    if (!requestFormData.integrationName.trim()) {
+      toast.error('Please enter an integration name');
+      return;
+    }
+    if (!requestFormData.useCase.trim()) {
+      toast.error('Please describe your use case');
+      return;
+    }
+    if (!validateEmail(requestFormData.email)) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      const requests = getFromLocalStorage('wealthmind_integration_requests', []);
+      requests.push({
+        ...requestFormData,
+        submittedAt: new Date().toISOString(),
+      });
+      saveToLocalStorage('wealthmind_integration_requests', requests);
+      toast.success('Integration request submitted! We\'ll review it shortly.');
+      setRequestFormData({ integrationName: '', useCase: '', email: '' });
+      setShowRequestModal(false);
+    } catch (error) {
+      toast.error('Failed to submit request');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -375,13 +415,74 @@ export default function SettingsPage() {
 
                 <footer className="mt-12 flex items-center justify-between">
                   <div className="text-[10px] small-caps text-white/[0.4] tracking-widest">More integrations coming · Request an integration</div>
-                  <button className="size-8 rounded-full border border-white/[0.1] flex items-center justify-center hover:bg-white/[0.05] transition-all">→</button>
+                  <button onClick={() => setShowRequestModal(true)} className="size-8 rounded-full border border-white/[0.1] flex items-center justify-center hover:bg-white/[0.05] transition-all">→</button>
                 </footer>
               </div>
             )}
           </div>
         </section>
       </main>
+
+      {/* Integration Request Modal */}
+      {showRequestModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-[#0d0d0d] border border-white/[0.1] rounded-lg p-8 max-w-md w-full mx-4">
+            <h3 className="text-lg font-medium mb-6">Request an Integration</h3>
+
+            <div className="flex flex-col gap-4">
+              <div>
+                <label className="block text-[12px] small-caps text-white/[0.4] mb-2">Integration Name</label>
+                <input
+                  type="text"
+                  value={requestFormData.integrationName}
+                  onChange={(e) => setRequestFormData({ ...requestFormData, integrationName: e.target.value })}
+                  placeholder="e.g., Sage, Xero, Crypto API"
+                  className="w-full px-4 py-2 rounded border border-white/[0.1] bg-white/[0.02] placeholder:text-white/[0.2] focus:outline-none focus:border-[#1a4d38] focus:bg-[#1a4d38]/10 transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[12px] small-caps text-white/[0.4] mb-2">Use Case</label>
+                <textarea
+                  value={requestFormData.useCase}
+                  onChange={(e) => setRequestFormData({ ...requestFormData, useCase: e.target.value })}
+                  placeholder="Tell us how you'd use this integration..."
+                  rows={3}
+                  className="w-full px-4 py-2 rounded border border-white/[0.1] bg-white/[0.02] placeholder:text-white/[0.2] focus:outline-none focus:border-[#1a4d38] focus:bg-[#1a4d38]/10 transition-all resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[12px] small-caps text-white/[0.4] mb-2">Email</label>
+                <input
+                  type="email"
+                  value={requestFormData.email}
+                  onChange={(e) => setRequestFormData({ ...requestFormData, email: e.target.value })}
+                  placeholder="your.email@example.com"
+                  className="w-full px-4 py-2 rounded border border-white/[0.1] bg-white/[0.02] placeholder:text-white/[0.2] focus:outline-none focus:border-[#1a4d38] focus:bg-[#1a4d38]/10 transition-all"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-8">
+              <button
+                onClick={() => setShowRequestModal(false)}
+                disabled={isLoading}
+                className="flex-1 px-4 py-2 rounded border border-white/[0.1] text-white hover:bg-white/[0.05] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRequestIntegration}
+                disabled={isLoading}
+                className="flex-1 px-4 py-2 rounded bg-[#1a4d38] text-white hover:bg-[#0f3d2f] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoading ? 'Submitting...' : 'Submit Request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
