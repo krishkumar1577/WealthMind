@@ -8,6 +8,12 @@ import { saveToLocalStorage, getFromLocalStorage } from '@/lib/utils';
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const ALLOWED_TYPES = ['application/pdf', 'text/csv', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel', 'image/jpeg', 'image/png'];
 
+type ProcessedFile = {
+  filename: string;
+  analysis: string;
+  uploadedAt: string;
+};
+
 export default function UploadPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -15,6 +21,7 @@ export default function UploadPage() {
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [fileErrors, setFileErrors] = useState<Record<string, string>>({});
+  const [processedFiles, setProcessedFiles] = useState<ProcessedFile[]>([]);
 
   const validateFiles = (files: File[]): boolean => {
     const errors: Record<string, string> = {};
@@ -95,6 +102,37 @@ export default function UploadPage() {
     toast.success(`${removed.name} removed`);
   };
 
+  const processFile = async (file: File) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('action', 'analyze');
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        return {
+          filename: data.filename,
+          analysis: data.analysis,
+          uploadedAt: data.uploadedAt,
+        };
+      } else {
+        throw new Error(data.error || 'Failed to process file');
+      }
+    } catch (error) {
+      console.error('File processing error:', error);
+      throw error;
+    }
+  };
+
   const handleProcessDocuments = async () => {
     if (uploadedFiles.length === 0) {
       toast.error('No files to process');
@@ -102,39 +140,44 @@ export default function UploadPage() {
     }
 
     setIsProcessing(true);
-    const processingToast = toast.loading('Processing documents...');
+    const processingToast = toast.loading('Processing documents with AI...');
 
     try {
-      // Simulate document processing
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const processed: ProcessedFile[] = [];
 
-      // Save uploaded files to localStorage
-      const fileData = {
-        count: uploadedFiles.length,
-        files: uploadedFiles.map((f) => ({
-          name: f.name,
-          size: f.size,
-          type: f.type,
-          uploadedAt: new Date().toISOString(),
-        })),
-        uploadedAt: new Date().toISOString(),
-      };
+      for (const file of uploadedFiles) {
+        try {
+          const result = await processFile(file);
+          processed.push(result);
+        } catch (error) {
+          console.error(`Error processing ${file.name}:`, error);
+          toast.error(`Failed to process ${file.name}`);
+        }
+      }
 
-      saveToLocalStorage('wealthmind_uploads', fileData);
+      if (processed.length > 0) {
+        // Save processed files to localStorage
+        saveToLocalStorage('wealthmind_processed_uploads', processed);
 
-      toast.dismiss(processingToast);
-      toast.success(`${uploadedFiles.length} document(s) processed successfully!`);
+        toast.dismiss(processingToast);
+        toast.success(`${processed.length} document(s) processed successfully!`);
 
-      // Reset form after successful processing
-      setUploadedFiles([]);
-      setFileErrors({});
+        // Reset form after successful processing
+        setUploadedFiles([]);
+        setFileErrors({});
+        setProcessedFiles(processed);
 
-      // Redirect to chat after a short delay
-      setTimeout(() => {
-        router.push('/chat?prompt=Please analyze my uploaded financial documents');
-      }, 1500);
+        // Redirect to chat after a short delay
+        setTimeout(() => {
+          router.push('/chat?prompt=Please analyze my uploaded financial documents and provide insights on my portfolio');
+        }, 1500);
+      } else {
+        toast.dismiss(processingToast);
+        toast.error('No files were successfully processed.');
+      }
     } catch (error) {
       toast.dismiss(processingToast);
+      console.error('Document processing error:', error);
       toast.error('Failed to process documents. Please try again.');
     } finally {
       setIsProcessing(false);

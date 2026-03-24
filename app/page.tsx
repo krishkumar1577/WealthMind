@@ -188,117 +188,51 @@ export default function Home() {
         ))}
       </main>
 
-      {/* Prompt Chips */}
-      <div className="flex justify-center gap-4 mb-12 flex-wrap">
-        {PROMPT_CHIPS.map((chip, idx) => (
-          <button 
-            key={idx} 
-            onClick={() => handlePromptChipClick(chip)}
-            disabled={isLoading}
-            className="prompt-chip disabled:opacity-50"
-          >
-            {chip}
-          </button>
-        ))}
-      </div>
-      {/* END: Middle Zone */}
-
-      {/* BEGIN: Bottom Zone (Input Bar & Profile) */}
-      <footer className="relative w-full flex flex-col items-center">
-        {/* Profile Badge (Absolute Bottom Left) */}
-        <div
-          className="absolute bottom-0 left-0 flex items-center gap-3"
-          data-purpose="user-profile"
-        >
-          <div className="w-10 h-10 rounded-full border border-white/[0.05] flex items-center justify-center bg-white/5 font-serif italic text-xs">
-            AM
-          </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-light">Alex Miller</span>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="bg-wealth-emerald text-[10px] tracking-widest px-1.5 py-0.5 rounded flex items-center gap-1 font-medium text-foreground">
-                <svg
-                  className="w-2 h-2"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                </svg>
-                PRO
-              </span>
-            </div>
-          </div>
+      {/* BEGIN: Input Area */}
+      <footer className="w-full max-w-7xl mx-auto px-6 pb-8">
+        {/* Prompt Chips */}
+        <div className="flex justify-center gap-4 mb-12 flex-wrap">
+          {PROMPT_CHIPS.map((chip, idx) => (
+            <button 
+              key={idx} 
+              onClick={() => handlePromptChipClick(chip)}
+              disabled={isLoading}
+              className="prompt-chip disabled:opacity-50 cursor-pointer"
+            >
+              {chip}
+            </button>
+          ))}
         </div>
 
-        {/* Central Pill Input */}
-        <div className="pill-input-container w-full max-w-2xl bg-white/5 border border-white/[0.05] rounded-full flex items-center px-6 py-4 mb-2">
+        {/* Search Input */}
+        <div className="relative flex items-center">
           <input
             ref={inputRef}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="bg-transparent border-none focus:ring-0 w-full text-lg font-light placeholder:opacity-30 outline-none disabled:opacity-50"
-            placeholder="Inquire about your holdings..."
+            className="w-full h-[56px] bg-white/[.04] border border-white/[.08] rounded-full pl-6 pr-14 text-[15px] placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-white/20 transition-all"
+            placeholder={PLACEHOLDERS[placeholderIndex]}
             type="text"
             disabled={isLoading}
           />
           <button
             onClick={handleSendMessage}
             disabled={isLoading}
-            className="ml-4 w-10 h-10 rounded-full flex items-center justify-center hover:opacity-80 transition-opacity disabled:opacity-50"
-            style={{ backgroundColor: "#1a4d38" }}
+            className="absolute right-2 w-12 h-12 rounded-full bg-white/5 hover:bg-white/[.08] border border-white/10 flex items-center justify-center transition-colors disabled:opacity-50"
+            aria-label="Send message"
           >
-            {isLoading ? (
-              <svg
-                className="w-5 h-5 animate-spin"
-                fill="none"
-                stroke="#f0ece4"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                />
-              </svg>
-            ) : (
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="#f0ece4"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  d="M5 10l7-7m0 0l7 7m-7-7v18"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                />
-              </svg>
-            )}
+            <svg
+              className="w-5 h-5 rotate-90 text-white/60"
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path>
+            </svg>
           </button>
         </div>
-
-        {/* Rotating Helper Text */}
-        <div className="h-6 overflow-hidden">
-          <p
-            className={`text-xs font-light opacity-30 italic placeholder-fade ${
-              fadeOut ? "opacity-0" : "opacity-30"
-            }`}
-          >
-            "{PLACEHOLDERS[placeholderIndex]}"
-          </p>
-        </div>
       </footer>
-      {/* END: Bottom Zone */}
+      {/* END: Input Area */}
     </>
   );
 }

@@ -2,49 +2,129 @@
 
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState, useEffect, useRef, Suspense } from "react";
+import toast from "react-hot-toast";
 
 export const dynamic = "force-dynamic";
+
+// Simple markdown parser for formatting
+function parseMarkdown(text: string) {
+  // Split by lines and process each line
+  const lines = text.split('\n');
+  const elements: (string | React.ReactNode)[] = [];
+
+  lines.forEach((line, idx) => {
+    if (!line.trim()) {
+      elements.push(<div key={`empty-${idx}`} className="h-2" />);
+      return;
+    }
+
+    let processedLine = line;
+    const parts: (string | React.ReactNode)[] = [];
+    let lastIndex = 0;
+
+    // Replace **text** with bold
+    const boldRegex = /\*\*(.+?)\*\*/g;
+    let match;
+    
+    while ((match = boldRegex.exec(processedLine)) !== null) {
+      parts.push(processedLine.substring(lastIndex, match.index));
+      parts.push(<strong key={`bold-${match.index}`} className="font-semibold">{match[1]}</strong>);
+      lastIndex = match.index + match[0].length;
+    }
+    
+    if (lastIndex < processedLine.length) {
+      parts.push(processedLine.substring(lastIndex));
+    }
+
+    if (parts.length > 0) {
+      elements.push(
+        <p key={idx} className="whitespace-pre-wrap break-words">
+          {parts.length === 1 ? parts[0] : parts}
+        </p>
+      );
+    }
+  });
+
+  return elements;
+}
 
 function ChatContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const initialPrompt = searchParams.get("prompt") || "";
-  const [messages, setMessages] = useState<Array<{ role: "user" | "ai"; content: string }>>([
-    {
-      role: "user",
-      content:
-        "Analyze my current portfolio allocation and identify any over-exposure in the tech sector versus my risk parameters for 2025. Also, break down the quarterly expense projections.",
-    },
-    {
-      role: "ai",
-      content:
-        "Based on the latest consolidated data from your custodians, your tech exposure currently stands at 32.4%. This exceeds your defined 2025 mandate of 25.0% by a margin of 7.4%.",
-    },
-  ]);
+  const [messages, setMessages] = useState<Array<{ role: "user" | "ai"; content: string }>>([]);
   const [inputValue, setInputValue] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   // If there's an initial prompt from home, add it as the first message
   useEffect(() => {
-    if (initialPrompt && messages.length === 0) {
-      setMessages([{ role: "user", content: initialPrompt }]);
+    if (initialPrompt) {
+      const userMessage = { role: "user" as const, content: initialPrompt };
+      setMessages([userMessage]);
+      // Send to API immediately
+      sendMessageToAPI(initialPrompt, [userMessage]);
     }
   }, [initialPrompt]);
 
-  const handleSendMessage = () => {
+  const sendMessageToAPI = async (message: string, currentMessages: Array<{ role: "user" | "ai"; content: string }>) => {
+    try {
+      setIsLoading(true);
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message,
+          conversationHistory: currentMessages,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Replace the loading indicator with actual response
+        setMessages((prev) => {
+          const updated = [...prev];
+          if (updated[updated.length - 1]?.content === "...") {
+            updated[updated.length - 1] = { role: "ai", content: data.message };
+          } else {
+            updated.push({ role: "ai", content: data.message });
+          }
+          return updated;
+        });
+      } else {
+        throw new Error(data.error || "Failed to get response");
+      }
+    } catch (error) {
+      console.error("Chat error:", error);
+      toast.error("Failed to send message. Please try again.");
+      setMessages((prev) => prev.filter((msg) => msg.content !== "..."));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSendMessage = async () => {
     if (inputValue.trim()) {
-      setMessages([...messages, { role: "user", content: inputValue }]);
+      const userMessage = { role: "user" as const, content: inputValue };
+      const newMessages = [...messages, userMessage];
+      setMessages(newMessages);
       setInputValue("");
-      // Simulate AI response (replace with actual API call)
-      setTimeout(() => {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "ai",
-            content: "I'm processing your request. This is a placeholder response.",
-          },
-        ]);
-      }, 500);
+      
+      // Add loading indicator
+      setMessages((prev) => [...prev, { role: "ai", content: "..." }]);
+      
+      await sendMessageToAPI(inputValue, newMessages);
     }
   };
 
@@ -161,14 +241,18 @@ function ChatContent() {
                       Wealthmind
                     </span>
                   </div>
-                  {/* Content */}
-                  <div className="space-y-4 text-[15px] font-light leading-[1.8] text-white/90">
-                    <p>{message.content}</p>
+                  {/* Content - Better formatting for long responses */}
+                  <div className="space-y-3 text-[14px] font-light leading-[1.8] text-white/85 max-w-3xl">
+                    {message.content === "..." ? (
+                      <p className="italic text-white/50">Processing your request...</p>
+                    ) : (
+                      <div>{parseMarkdown(message.content)}</div>
+                    )}
                   </div>
                 </div>
               )
             )}
-          </div>
+            <div ref={messagesEndRef} />
         </div>
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-wealth-black via-wealth-black to-transparent pt-12 pb-8">
 
@@ -243,6 +327,7 @@ function ChatContent() {
           </div>
         </div>
         {/* END: Input Area */}
+        </div>
       </main>
       {/* END: Main Chat View */}
     </div>
