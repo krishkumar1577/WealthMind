@@ -151,7 +151,12 @@ export default function UploadPage() {
           processed.push(result);
         } catch (error) {
           console.error(`Error processing ${file.name}:`, error);
-          toast.error(`Failed to process ${file.name}`);
+          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+          if (errorMsg.includes('quota') || errorMsg.includes('429')) {
+            toast.error('API quota exceeded. Try again after midnight!');
+          } else {
+            toast.error(`Failed to process ${file.name}`);
+          }
         }
       }
 

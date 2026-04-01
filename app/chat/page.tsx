@@ -3,49 +3,298 @@
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState, useEffect, useRef, Suspense } from "react";
 import toast from "react-hot-toast";
+import katex from "katex";
+import "katex/dist/katex.min.css";
 
 export const dynamic = "force-dynamic";
 
-// Simple markdown parser for formatting
+// Enhanced markdown parser with formatting, tables, and LaTeX support
 function parseMarkdown(text: string) {
-  // Split by lines and process each line
+  const elements: React.ReactNode[] = [];
+  let keyCounter = 0;
+  let remaining = text;
+
+  // First, extract and process tables, block equations, and regular content
+  const blockRegex = /(\|[\s\S]+?\|(?:\n\|[\s\S]+?\|)*)|(\$\$[\s\S]+?\$\$)|([\s\S]+?)(?=\||\$\$|$)/g;
+  let blockMatch;
+
+  while ((blockMatch = blockRegex.exec(remaining)) !== null) {
+    if (blockMatch[1]) {
+      // Table detected
+      const tableHtml = renderTable(blockMatch[1]);
+      elements.push(
+        <div key={`table-${keyCounter++}`} dangerouslySetInnerHTML={{ __html: tableHtml }} />
+      );
+    } else if (blockMatch[2]) {
+      // Block equation detected ($$...$$)
+      const equation = blockMatch[2].slice(2, -2).trim();
+      try {
+        const html = katex.renderToString(equation, { displayMode: true });
+        elements.push(
+          <div
+            key={`math-block-${keyCounter++}`}
+            className="math-block"
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        );
+      } catch (error) {
+        console.warn('KaTeX render error:', error);
+        elements.push(
+          <div key={`math-error-${keyCounter++}`} className="text-red-400 text-sm">
+            [Math Error: {(error as Error).message}]
+          </div>
+        );
+      }
+    } else if (blockMatch[3]) {
+      // Regular content
+      const content = blockMatch[3];
+      const parsed = parseContent(content, keyCounter);
+      elements.push(...parsed.elements);
+      keyCounter = parsed.nextKey;
+    }
+  }
+
+  return elements.length > 0 ? elements : parseContent(text, keyCounter).elements;
+}
+
+function parseContent(text: string, startKey: number): { elements: React.ReactNode[]; nextKey: number } {
   const lines = text.split('\n');
-  const elements: (string | React.ReactNode)[] = [];
+  const elements: React.ReactNode[] = [];
+  let keyCounter = startKey;
 
   lines.forEach((line, idx) => {
     if (!line.trim()) {
-      elements.push(<div key={`empty-${idx}`} className="h-2" />);
+      elements.push(<div key={`empty-${startKey}-${idx}`} className="h-2" />);
       return;
     }
 
-    let processedLine = line;
-    const parts: (string | React.ReactNode)[] = [];
-    let lastIndex = 0;
+    // Check if it's a bullet point
+    const bulletMatch = line.match(/^\s*[\*\-]\s+(?:\*\*)?(.*)$/);
+    const isBullet = !!bulletMatch;
+    const contentLine = isBullet ? bulletMatch![1] : line;
 
-    // Replace **text** with bold
-    const boldRegex = /\*\*(.+?)\*\*/g;
-    let match;
-    
-    while ((match = boldRegex.exec(processedLine)) !== null) {
-      parts.push(processedLine.substring(lastIndex, match.index));
-      parts.push(<strong key={`bold-${match.index}`} className="font-semibold">{match[1]}</strong>);
-      lastIndex = match.index + match[0].length;
-    }
-    
-    if (lastIndex < processedLine.length) {
-      parts.push(processedLine.substring(lastIndex));
-    }
+    // Parse the line for bold, highlights, and inline equations
+    const parsed = parseLine(contentLine, keyCounter);
+    keyCounter = parsed.nextKey;
 
-    if (parts.length > 0) {
+    if (isBullet) {
       elements.push(
-        <p key={idx} className="whitespace-pre-wrap break-words">
-          {parts.length === 1 ? parts[0] : parts}
+        <div key={`bullet-${startKey}-${idx}`} className="flex gap-3 ml-4 mb-2">
+          <span className="text-emerald-400 font-bold mt-0.5 flex-shrink-0">•</span>
+          <p className="whitespace-pre-wrap break-words leading-relaxed">
+            {parsed.content}
+          </p>
+        </div>
+      );
+    } else {
+      elements.push(
+        <p key={`para-${startKey}-${idx}`} className="whitespace-pre-wrap break-words leading-relaxed mb-2">
+          {parsed.content}
         </p>
       );
     }
   });
 
-  return elements;
+  return { elements, nextKey: keyCounter };
+}
+
+function renderTable(tableText: string): string {
+  const rows = tableText.split('\n').filter((row) => row.trim().startsWith('|'));
+  
+  let html = '<table>';
+  let isHeader = true;
+
+  rows.forEach((row) => {
+    const cells = row.split('|').slice(1, -1).map((cell) => cell.trim());
+
+    if (cells.length === 0) return;
+
+    // Skip separator row (|---|---|)
+    if (cells.every((cell) => /^-+$/.test(cell))) {
+      isHeader = false;
+      return;
+    }
+
+    const tag = isHeader ? 'th' : 'td';
+    html += `<tr>${cells.map((cell) => `<${tag}>${escapeHtml(cell)}</${tag}>`).join('')}</tr>`;
+
+    if (isHeader) {
+      html += '';
+      isHeader = false;
+    }
+  });
+
+  html += '</table>';
+  return html;
+}
+
+function escapeHtml(text: string): string {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+interface ParseResult {
+  content: React.ReactNode[];
+  nextKey: number;
+}
+
+function parseLine(text: string, startKey: number): ParseResult {
+  const parts: React.ReactNode[] = [];
+  let key = startKey;
+  let remaining = text;
+
+  // First pass: extract bold sections and inline equations
+  const segments: Array<{ type: 'bold' | 'math' | 'text'; content: string }> = [];
+  const combinedRegex = /\*\*(.+?)\*\*|\$(?!\$)(.+?)\$(?!\$)/g;
+  let lastPos = 0;
+  let segmentMatch;
+
+  while ((segmentMatch = combinedRegex.exec(remaining)) !== null) {
+    if (segmentMatch.index > lastPos) {
+      segments.push({ type: 'text', content: remaining.substring(lastPos, segmentMatch.index) });
+    }
+    if (segmentMatch[1]) {
+      segments.push({ type: 'bold', content: segmentMatch[1] });
+    } else if (segmentMatch[2]) {
+      segments.push({ type: 'math', content: segmentMatch[2] });
+    }
+    lastPos = segmentMatch.index + segmentMatch[0].length;
+  }
+
+  if (lastPos < remaining.length) {
+    segments.push({ type: 'text', content: remaining.substring(lastPos) });
+  } else if (segments.length === 0) {
+    segments.push({ type: 'text', content: remaining });
+  }
+
+  // Second pass: process segments
+  segments.forEach((segment) => {
+    if (segment.type === 'bold') {
+      parts.push(
+        <strong key={`bold-${key++}`} className="font-semibold text-white">
+          {segment.content}
+        </strong>
+      );
+    } else if (segment.type === 'math') {
+      // Inline math equation
+      try {
+        const html = katex.renderToString(segment.content, { displayMode: false });
+        parts.push(
+          <span
+            key={`math-${key++}`}
+            className="math-inline"
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        );
+      } catch (error) {
+        console.warn('KaTeX inline render error:', error);
+        parts.push(
+          <span key={`math-error-${key++}`} className="text-red-300 text-xs">
+            [Eq]
+          </span>
+        );
+      }
+    } else {
+      // Highlight amounts, sections, acronyms
+      const highlighted = highlightContent(segment.content, key);
+      parts.push(...highlighted.parts);
+      key = highlighted.nextKey;
+    }
+  });
+
+  return { content: parts, nextKey: key };
+}
+
+interface HighlightResult {
+  parts: React.ReactNode[];
+  nextKey: number;
+}
+
+function highlightContent(text: string, startKey: number): HighlightResult {
+  const parts: React.ReactNode[] = [];
+  let key = startKey;
+
+  // Define highlight patterns
+  const patterns = [
+    {
+      name: 'currency',
+      regex: /₹[\d,\.]+\s*(?:lakh|crore|lac)?/g,
+      className: 'text-emerald-400 font-semibold',
+    },
+    {
+      name: 'section',
+      regex: /(?:Section|u\/s|Sec\.)\s*\d+[A-Z]*/g,
+      className: 'text-emerald-400 font-semibold',
+    },
+    {
+      name: 'percentage',
+      regex: /\d+(?:\.\d+)?%/g,
+      className: 'text-emerald-400 font-semibold',
+    },
+    {
+      name: 'acronym',
+      regex: /\b(?:PPF|EPF|ELSS|NPS|GST|ISC|FD|NSC|SSY|ITR|TDS|GSTR|ROC|MCA|CFO|SME)\b/g,
+      className: 'text-emerald-300 font-semibold',
+    },
+  ];
+
+  let lastIndex = 0;
+
+  // Collect all matches from all patterns with their position and type
+  interface Match {
+    index: number;
+    length: number;
+    text: string;
+    className: string;
+  }
+
+  const allMatches: Match[] = [];
+
+  patterns.forEach((pattern) => {
+    let match;
+    while ((match = pattern.regex.exec(text)) !== null) {
+      allMatches.push({
+        index: match.index,
+        length: match[0].length,
+        text: match[0],
+        className: pattern.className,
+      });
+    }
+  });
+
+  // Sort by index
+  allMatches.sort((a, b) => a.index - b.index);
+
+  // Remove duplicates/overlaps
+  const cleanMatches: Match[] = [];
+  let lastEnd = 0;
+  allMatches.forEach((match) => {
+    if (match.index >= lastEnd) {
+      cleanMatches.push(match);
+      lastEnd = match.index + match.length;
+    }
+  });
+
+  // Build the output
+  lastIndex = 0;
+  cleanMatches.forEach((match) => {
+    if (match.index > lastIndex) {
+      parts.push(text.substring(lastIndex, match.index));
+    }
+    parts.push(
+      <span key={`hl-${key++}`} className={match.className}>
+        {match.text}
+      </span>
+    );
+    lastIndex = match.index + match.length;
+  });
+
+  if (lastIndex < text.length) {
+    parts.push(text.substring(lastIndex));
+  }
+
+  return { parts: parts.length > 0 ? parts : [text], nextKey: key };
 }
 
 function ChatContent() {
@@ -57,6 +306,7 @@ function ChatContent() {
   const [isLoading, setIsLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -65,9 +315,9 @@ function ChatContent() {
 
   // If there's an initial prompt from home, add it as the first message
   useEffect(() => {
-    if (initialPrompt) {
+    if (initialPrompt && messages.length === 0) {
       const userMessage = { role: "user" as const, content: initialPrompt };
-      setMessages([userMessage]);
+      setMessages([userMessage, { role: "ai", content: "..." }]);
       // Send to API immediately
       sendMessageToAPI(initialPrompt, [userMessage]);
     }
@@ -76,41 +326,127 @@ function ChatContent() {
   const sendMessageToAPI = async (message: string, currentMessages: Array<{ role: "user" | "ai"; content: string }>) => {
     try {
       setIsLoading(true);
+      
+      // Create new AbortController for this request
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+      
+      let fullResponse = '';
+      let messageIndex = -1;
+      
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message,
           conversationHistory: currentMessages,
+          stream: true,
         }),
+        signal: abortController.signal,
       });
 
       if (!response.ok) {
         throw new Error(`API error: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
 
-      if (data.success) {
-        // Replace the loading indicator with actual response
-        setMessages((prev) => {
-          const updated = [...prev];
-          if (updated[updated.length - 1]?.content === "...") {
-            updated[updated.length - 1] = { role: "ai", content: data.message };
-          } else {
-            updated.push({ role: "ai", content: data.message });
-          }
-          return updated;
-        });
-      } else {
-        throw new Error(data.error || "Failed to get response");
+      if (!reader) {
+        throw new Error('Response body is not readable');
       }
+
+      // Find the AI message index
+      setMessages((prev) => {
+        messageIndex = prev.length - 1;
+        return prev;
+      });
+
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            
+            if (data === '[DONE]') {
+              break;
+            }
+
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.chunk) {
+                // Token-by-token typing effect
+                for (const char of parsed.chunk) {
+                  fullResponse += char;
+                  
+                  setMessages((prev) => {
+                    const updated = [...prev];
+                    if (messageIndex >= 0 && updated[messageIndex]?.role === "ai") {
+                      updated[messageIndex] = { role: "ai", content: fullResponse };
+                    }
+                    return updated;
+                  });
+                  
+                  // Small delay between tokens for smooth typing effect
+                  await new Promise(resolve => setTimeout(resolve, 8));
+                }
+              } else if (parsed.error) {
+                throw new Error(parsed.error);
+              }
+            } catch (parseError) {
+              if (!(parseError instanceof SyntaxError)) {
+                console.error('Parse error:', parseError);
+              }
+            }
+          }
+        }
+      }
+
+      // Final cleanup
+      setMessages((prev) => {
+        const updated = [...prev];
+        if (messageIndex >= 0 && updated[messageIndex]?.content === "...") {
+          updated[messageIndex] = { role: "ai", content: fullResponse };
+        }
+        return updated;
+      });
+
     } catch (error) {
       console.error("Chat error:", error);
-      toast.error("Failed to send message. Please try again.");
+      
+      // Check if error is AbortError (user clicked stop)
+      if (error instanceof Error && error.name === 'AbortError') {
+        toast.success("✋ Response generation stopped");
+        return;
+      }
+      
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      
       setMessages((prev) => prev.filter((msg) => msg.content !== "..."));
+      
+      if (errorMsg.includes("quota") || errorMsg.includes("429")) {
+        toast.error("🔄 API quota exceeded. Try again after midnight!");
+      } else if (!errorMsg.includes('AbortError')) {
+        toast.error("Failed to send message. Please try again.");
+      }
     } finally {
       setIsLoading(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleStopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setIsLoading(false);
+      toast.success("✋ Stopping response generation...");
     }
   };
 
@@ -213,12 +549,12 @@ function ChatContent() {
       {/* BEGIN: Main Chat View */}
       <main className="flex-1 flex flex-col relative overflow-hidden">
         {/* Chat History */}
-        <div className="flex-1 overflow-y-auto px-6 pt-12 pb-32">
-          <div className="max-w-2xl mx-auto space-y-8">
+        <div className="flex-1 overflow-y-auto px-6 pt-12 pb-0 scroll-smooth">
+          <div className="max-w-2xl mx-auto space-y-8 pb-32">
             {messages.map((message, idx) =>
               message.role === "user" ? (
                 // User Message
-                <div key={idx} className="flex justify-end">
+                <div key={`msg-${idx}-user-${message.content.substring(0, 10)}`} className="flex justify-end">
                   <div className="max-w-[65%] bg-white/[0.03] border border-white/[0.05] p-5 rounded-xl rounded-br-[4px]">
                     <p className="text-[15px] font-light leading-relaxed">
                       {message.content}
@@ -227,7 +563,7 @@ function ChatContent() {
                 </div>
               ) : (
                 // AI Response
-                <div key={idx} className="flex flex-col space-y-4">
+                <div key={`msg-${idx}-ai-${message.content === "..." ? "loading" : "response"}`} className="flex flex-col space-y-4">
                   {/* Header */}
                   <div className="flex items-center gap-2 opacity-60">
                     <svg
@@ -254,10 +590,12 @@ function ChatContent() {
             )}
             <div ref={messagesEndRef} />
         </div>
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-wealth-black via-wealth-black to-transparent pt-12 pb-8">
+        </div>
 
-        {/* BEGIN: Input Area */}
-          <div className="max-w-2xl mx-auto px-6">
+        {/* Input Area - Fixed at bottom with smooth layering */}
+        <div className="sticky bottom-0 left-0 right-0 flex flex-col z-20 bg-gradient-to-t from-wealth-black via-wealth-black/95 to-transparent backdrop-blur-sm pt-8 pb-6">
+          {/* BEGIN: Input Area */}
+          <div className="max-w-2xl mx-auto px-6 w-full">
             {/* Suggestion Chips */}
             <div className="flex gap-3 mb-4 justify-center flex-wrap">
               <button 
@@ -304,18 +642,35 @@ function ChatContent() {
                 placeholder="Direct your inquiry to Wealthmind..."
                 type="text"
               />
-              <button
-                onClick={handleSendMessage}
-                className="absolute right-4 opacity-40 hover:opacity-100 cursor-pointer transition-opacity"
-              >
-                <svg
-                  className="w-5 h-5 rotate-90"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
+              {isLoading ? (
+                <button
+                  onClick={handleStopGeneration}
+                  className="absolute right-4 opacity-100 hover:opacity-75 cursor-pointer transition-opacity text-red-400"
+                  title="Stop generation"
                 >
-                  <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path>
-                </svg>
-              </button>
+                  <svg
+                    className="w-5 h-5"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path fillRule="evenodd" d="M4 2a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V4a2 2 0 00-2-2H4zm0 2h12v12H4V4z" clipRule="evenodd"></path>
+                  </svg>
+                </button>
+              ) : (
+                <button
+                  onClick={handleSendMessage}
+                  className="absolute right-4 opacity-40 hover:opacity-100 cursor-pointer transition-opacity"
+                  title="Send message"
+                >
+                  <svg
+                    className="w-5 h-5 rotate-90"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path>
+                  </svg>
+                </button>
+              )}
             </div>
 
             {/* Footer Text */}
@@ -327,7 +682,6 @@ function ChatContent() {
           </div>
         </div>
         {/* END: Input Area */}
-        </div>
       </main>
       {/* END: Main Chat View */}
     </div>
